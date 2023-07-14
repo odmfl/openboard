@@ -21,6 +21,7 @@ import android.content.res.TypedArray;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorFilter;
 import android.graphics.Paint;
 import android.graphics.Paint.Align;
 import android.graphics.PorterDuff;
@@ -32,11 +33,16 @@ import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.View;
 
+import androidx.core.graphics.BlendModeColorFilterCompat;
+import androidx.core.graphics.BlendModeCompat;
+
 import org.dslul.openboard.inputmethod.keyboard.internal.KeyDrawParams;
 import org.dslul.openboard.inputmethod.keyboard.internal.KeyVisualAttributes;
 import org.dslul.openboard.inputmethod.latin.R;
 import org.dslul.openboard.inputmethod.latin.common.Constants;
 import org.dslul.openboard.inputmethod.latin.settings.Settings;
+import org.dslul.openboard.inputmethod.latin.settings.SettingsValues;
+import org.dslul.openboard.inputmethod.latin.suggestions.MoreSuggestionsView;
 import org.dslul.openboard.inputmethod.latin.utils.TypefaceUtils;
 
 import java.util.HashSet;
@@ -96,6 +102,11 @@ public class KeyboardView extends View {
     private final float mSpacebarIconWidthRatio;
     private final Rect mKeyBackgroundPadding = new Rect();
     private static final float KET_TEXT_SHADOW_RADIUS_DISABLED = -1.0f;
+    private final ColorFilter keyHintTextColorFilter;
+    private final ColorFilter keyTextColorFilter;
+    private final ColorFilter keyBgFilter;
+    private final ColorFilter accentColorFilter;
+    private final boolean mUserTheme;
 
     // The maximum key label width in the proportion to the key width.
     private static final float MAX_LABEL_RATIO = 0.90f;
@@ -166,6 +177,22 @@ public class KeyboardView extends View {
         keyAttr.recycle();
 
         mPaint.setAntiAlias(true);
+
+        final SettingsValues settingsValues = Settings.getInstance().getCurrent();
+        mUserTheme = settingsValues.mUserTheme;
+        if (mUserTheme) {
+            getBackground().setColorFilter(settingsValues.mBackgroundColorFilter);
+
+            keyBgFilter = settingsValues.mKeyBackgroundColorFilter;
+            keyHintTextColorFilter = settingsValues.mHintTextColorFilter;
+            keyTextColorFilter = settingsValues.mKeyTextColorFilter;
+            accentColorFilter = BlendModeColorFilterCompat.createBlendModeColorFilterCompat(settingsValues.mUserThemeColorAccent, BlendModeCompat.SRC_ATOP);
+        } else {
+            keyHintTextColorFilter = null;
+            keyTextColorFilter = null;
+            keyBgFilter = null;
+            accentColorFilter = null;
+        }
     }
 
     @Nullable
@@ -370,6 +397,17 @@ public class KeyboardView extends View {
             bgX = -padding.left;
             bgY = -padding.top;
         }
+        if (mUserTheme) {
+            // color filter is applied to background, which is re-used
+            // but we don't want it applied to "blue" keys
+            // so we always need to select the color filter dependent on the current key
+            if (key.isActionKey())
+                background.setColorFilter(accentColorFilter);
+            else if (key.getBackgroundType() == Key.BACKGROUND_TYPE_NORMAL && key.getCode() < 0 && key.getCode() != Constants.CODE_SWITCH_ALPHA_SYMBOL && key.getCode() != Constants.CODE_OUTPUT_TEXT)
+                background.clearColorFilter();
+            else
+                background.setColorFilter(keyBgFilter);
+        }
         background.setBounds(0, 0, bgWidth, bgHeight);
         canvas.translate(bgX, bgY);
         background.draw(canvas);
@@ -422,6 +460,17 @@ public class KeyboardView extends View {
 
             if (key.isEnabled()) {
                 paint.setColor(key.selectTextColor(params));
+                if (mUserTheme) {
+                    // set key color only if not in emoji keyboard range
+                    if (keyboard != null
+                            && (this.getClass() == MoreSuggestionsView.class ?
+                                !containsEmoji(key.getLabel()) : // doesn't contain emoji (all can happen in MoreSuggestionsView)
+                                (keyboard.mId.mElementId < 10 || keyboard.mId.mElementId > 26) // not showing emoji keyboard (no emojis visible on main keyboard otherwise)
+                            ))
+                        paint.setColorFilter(keyTextColorFilter);
+                    else
+                        paint.setColorFilter(null);
+                }
                 // Set a drop shadow for the text if the shadow radius is positive value.
                 if (mKeyTextShadowRadius > 0.0f) {
                     paint.setShadowLayer(mKeyTextShadowRadius, 0.0f, 0.0f, params.mTextShadowColor);
@@ -445,6 +494,8 @@ public class KeyboardView extends View {
         if (hintLabel != null && mShowsHints) {
             paint.setTextSize(key.selectHintTextSize(params));
             paint.setColor(key.selectHintTextColor(params));
+            if (mUserTheme)
+                paint.setColorFilter(keyHintTextColorFilter);
             // TODO: Should add a way to specify type face for hint letters
             paint.setTypeface(Typeface.DEFAULT_BOLD);
             blendAlpha(paint, params.mAnimAlpha);
@@ -497,12 +548,24 @@ public class KeyboardView extends View {
                 iconY = (keyHeight - iconHeight) / 2; // Align vertically center.
             }
             final int iconX = (keyWidth - iconWidth) / 2; // Align horizontally center.
+            if (mUserTheme && key.getBackgroundType() != Key.BACKGROUND_TYPE_NORMAL && !key.isActionKey() && !key.isShift())
+                // no color for shift (because of state indicator) and accent color keys (action and popup)
+                icon.setColorFilter(keyTextColorFilter);
             drawIcon(canvas, icon, iconX, iconY, iconWidth, iconHeight);
         }
 
         if (key.hasPopupHint() && key.getMoreKeys() != null) {
             drawKeyPopupHint(key, canvas, paint, params);
         }
+    }
+
+    private static boolean containsEmoji(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (!(c <= 0xD7FF || (c >= 0xE000 && c <= 0xFFFD) || (c >= 0x10000 && c <= 0x10FFFF)))
+                return true;
+        }
+        return false;
     }
 
     // Draw popup hint "..." at the bottom right corner of the key.

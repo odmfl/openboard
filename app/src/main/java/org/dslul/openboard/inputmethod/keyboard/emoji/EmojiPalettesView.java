@@ -20,6 +20,7 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Color;
+import android.graphics.ColorFilter;
 import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
@@ -34,6 +35,8 @@ import android.widget.TabWidget;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.graphics.BlendModeColorFilterCompat;
+import androidx.core.graphics.BlendModeCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import org.dslul.openboard.inputmethod.compat.TabHostCompat;
@@ -96,6 +99,8 @@ public final class EmojiPalettesView extends LinearLayout
     private KeyboardActionListener mKeyboardActionListener = KeyboardActionListener.EMPTY_LISTENER;
 
     private final EmojiCategory mEmojiCategory;
+
+    private ImageView mCurrentTab = null;
 
     public EmojiPalettesView(final Context context, final AttributeSet attrs) {
         this(context, attrs, R.attr.emojiPalettesViewStyle);
@@ -161,6 +166,11 @@ public final class EmojiPalettesView extends LinearLayout
         // TODO: Replace background color with its own setting rather than using the
         //       category page indicator background as a workaround.
         iconView.setBackgroundColor(mCategoryPageIndicatorBackground);
+        final SettingsValues settingsValues = Settings.getInstance().getCurrent();
+        if (settingsValues.mUserTheme) {
+            iconView.getBackground().setColorFilter(settingsValues.mBackgroundColorFilter);
+            iconView.setColorFilter(settingsValues.mKeyTextColorFilter);
+        }
         iconView.setImageResource(mEmojiCategory.getCategoryTabIcon(categoryId));
         iconView.setContentDescription(mEmojiCategory.getAccessibilityDescription(categoryId));
         tspec.setIndicator(iconView);
@@ -262,6 +272,16 @@ public final class EmojiPalettesView extends LinearLayout
         mSpacebar.setTag(Constants.CODE_SPACE);
         mSpacebar.setOnTouchListener(this);
         mSpacebar.setOnClickListener(this);
+        final SettingsValues settingsValues = Settings.getInstance().getCurrent();
+        if (settingsValues.mUserTheme) {
+            final ColorFilter cf = settingsValues.mKeyBackgroundColorFilter;
+            mAlphabetKeyLeft.getBackground().setColorFilter(cf);
+            mSpacebar.getBackground().setColorFilter(cf);
+            mDeleteKey.getBackground().setColorFilter(cf);
+            getBackground().setColorFilter(cf);
+            mEmojiCategoryPageIndicatorView.setColors(settingsValues.mUserThemeColorAccent, settingsValues.mBackgroundColor);
+            findViewById(R.id.emoji_tab_strip).getBackground().setColorFilter(cf);
+        }
         mEmojiLayoutParams.setKeyProperties(mSpacebar);
         mSpacebarIcon = findViewById(R.id.emoji_keyboard_space_icon);
     }
@@ -282,6 +302,13 @@ public final class EmojiPalettesView extends LinearLayout
         if (categoryId != mEmojiCategory.getCurrentCategoryId()) {
             setCurrentCategoryAndPageId(categoryId, 0, false /* force */);
             updateEmojiCategoryPageIdView();
+        }
+        final SettingsValues settingsValues = Settings.getInstance().getCurrent();
+        if (settingsValues.mUserTheme) {
+            if (mCurrentTab != null)
+                mCurrentTab.setColorFilter(settingsValues.mKeyTextColorFilter);
+            mCurrentTab = (ImageView) mTabHost.getCurrentTabView();
+            mCurrentTab.setColorFilter(settingsValues.mUserThemeColorAccent);
         }
     }
 
@@ -366,7 +393,11 @@ public final class EmojiPalettesView extends LinearLayout
     private static void setupAlphabetKey(final TextView alphabetKey, final String label,
                                          final KeyDrawParams params) {
         alphabetKey.setText(label);
-        alphabetKey.setTextColor(params.mFunctionalTextColor);
+        final SettingsValues settingsValues = Settings.getInstance().getCurrent();
+        if (settingsValues.mUserTheme)
+            alphabetKey.setTextColor(settingsValues.mKeyTextColor);
+        else
+            alphabetKey.setTextColor(params.mFunctionalTextColor);
         alphabetKey.setTextSize(TypedValue.COMPLEX_UNIT_PX, params.mLabelSize);
         alphabetKey.setTypeface(params.mTypeface);
     }
