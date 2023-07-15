@@ -47,6 +47,12 @@ android {
     }
 }
 
+task generateVersionTxt {
+    doLast {
+        file("./version.txt").text = android.defaultConfig.versionName
+    }
+}
+
 dependencies {
     implementation 'com.google.code.findbugs:jsr305:3.0.2'
     implementation 'androidx.legacy:legacy-support-v4:1.0.0'
