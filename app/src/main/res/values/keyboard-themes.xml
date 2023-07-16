@@ -77,7 +77,7 @@
         <item>@color/keyboard_background_lxx_dark</item> # material dark
         <item>@color/keyboard_background_lxx_dark_border</item> # material dark border
         <item>@color/background_amoled_black</item> # dark amoled
-        <item>@color/keyboard_background_lxx_light_border</item> # material dark auto
+        <item>@color/keyboard_background_lxx_dark_border</item> # material dark auto
         <item>@color/keyboard_background_lxx_light_border</item> # material light auto
         <item>@color/keyboard_background_lxx_light_border</item> # material light border auto
         <item>@color/keyboard_background_lxx_light</item> # material light
