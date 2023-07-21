@@ -25,7 +25,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Configuration;
 import android.content.res.Resources;
-import android.graphics.Color;
 import android.inputmethodservice.InputMethodService;
 import android.media.AudioManager;
 import android.os.Build;
@@ -103,6 +102,7 @@ import org.dslul.openboard.inputmethod.latin.emojisearch.EmojiSearch;
 import static org.dslul.openboard.inputmethod.latin.common.Constants.ImeOption.FORCE_ASCII;
 import static org.dslul.openboard.inputmethod.latin.common.Constants.ImeOption.NO_MICROPHONE;
 import static org.dslul.openboard.inputmethod.latin.common.Constants.ImeOption.NO_MICROPHONE_COMPAT;
+import static org.dslul.openboard.inputmethod.latin.utils.ColorUtils.isBrightColor;
 
 /**
  * Input method implementation for Qwerty'ish keyboard.
@@ -139,6 +139,8 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     private static final String SCHEME_PACKAGE = "package";
 
     final Settings mSettings;
+    private int mOriginalNavBarColor = 0;
+    private int mOriginalNavBarFlags = 0;
     private final DictionaryFacilitator mDictionaryFacilitator =
             DictionaryFacilitatorProvider.getDictionaryFacilitator(
                     false /* isNeededForSpellChecking */);
@@ -739,7 +741,7 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     private void resetDictionaryFacilitator(final Locale locale) {
         final SettingsValues settingsValues = mSettings.getCurrent();
         mDictionaryFacilitator.resetDictionaries(this /* context */, locale,
-                false, settingsValues.mUsePersonalizedDicts,
+                settingsValues.mUseContactsDictionary, settingsValues.mUsePersonalizedDicts,
                 false /* forceReloadMainDictionary */,
                 settingsValues.mAccount, "" /* dictNamePrefix */,
                 this /* DictionaryInitializationListener */);
@@ -756,7 +758,7 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     /* package private */ void resetSuggestMainDict() {
         final SettingsValues settingsValues = mSettings.getCurrent();
         mDictionaryFacilitator.resetDictionaries(this /* context */,
-                mDictionaryFacilitator.getLocale(), false,
+                mDictionaryFacilitator.getLocale(), settingsValues.mUseContactsDictionary,
                 settingsValues.mUsePersonalizedDicts,
                 true /* forceReloadMainDictionary */,
                 settingsValues.mAccount, "" /* dictNamePrefix */,
@@ -1069,7 +1071,8 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     @Override
     public void onWindowShown() {
         super.onWindowShown();
-        setNavigationBarVisibility(isInputViewShown());
+        if (isInputViewShown())
+            setNavigationBarColor();
     }
 
     @Override
@@ -1079,7 +1082,7 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
         if (mainKeyboardView != null) {
             mainKeyboardView.closing();
         }
-        setNavigationBarVisibility(false);
+        clearNavigationBarColor();
     }
 
     void onFinishInputInternal() {
@@ -1686,6 +1689,11 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
         setSuggestedWords(neutralSuggestions);
     }
 
+    @Override
+    public void removeSuggestion(final String word) {
+        mDictionaryFacilitator.removeWord(word);
+    }
+
     // Outside LatinIME, only used by the {@link InputTestsBase} test suite.
     @UsedForTesting
     void loadKeyboard() {
@@ -1942,7 +1950,7 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     void replaceDictionariesForTest(final Locale locale) {
         final SettingsValues settingsValues = mSettings.getCurrent();
         mDictionaryFacilitator.resetDictionaries(this, locale,
-                false, settingsValues.mUsePersonalizedDicts,
+                settingsValues.mUseContactsDictionary, settingsValues.mUsePersonalizedDicts,
                 false /* forceReloadMainDictionary */,
                 settingsValues.mAccount, "", /* dictionaryNamePrefix */
                 this /* DictionaryInitializationListener */);
@@ -2011,12 +2019,43 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
         return mSettings.getCurrent().isLanguageSwitchKeyEnabled();
     }
 
-    private void setNavigationBarVisibility(final boolean visible) {
-        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.M) {
-            // For N and later, IMEs can specify Color.TRANSPARENT to make the navigation bar
-            // transparent.  For other colors the system uses the default color.
-            getWindow().getWindow().setNavigationBarColor(
-                    visible ? Color.BLACK : Color.TRANSPARENT);
+    // slightly modified from Simple Keyboard: https://github.com/rkkr/simple-keyboard/blob/master/app/src/main/java/rkr/simplekeyboard/inputmethod/latin/LatinIME.java
+    private void setNavigationBarColor() {
+        final SettingsValues settingsValues = mSettings.getCurrent();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP || !settingsValues.mCustomNavBarColor)
+            return;
+        final int color = settingsValues.mNavBarColor;
+        final Window window = getWindow().getWindow();
+        if (window == null)
+            return;
+        mOriginalNavBarColor = window.getNavigationBarColor();
+        window.setNavigationBarColor(color);
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O)
+            return;
+        final View view = window.getDecorView();
+        mOriginalNavBarFlags = view.getSystemUiVisibility();
+        if (isBrightColor(color)) {
+            view.setSystemUiVisibility(mOriginalNavBarFlags | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        } else {
+            view.setSystemUiVisibility(mOriginalNavBarFlags & ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         }
     }
+
+    private void clearNavigationBarColor() {
+        final SettingsValues settingsValues = mSettings.getCurrent();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP || !settingsValues.mCustomNavBarColor)
+            return;
+        final Window window = getWindow().getWindow();
+        if (window == null) {
+            return;
+        }
+        window.setNavigationBarColor(mOriginalNavBarColor);
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O)
+            return;
+        final View view = window.getDecorView();
+        view.setSystemUiVisibility(mOriginalNavBarFlags);
+    }
+
 }
