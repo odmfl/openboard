@@ -1450,7 +1450,7 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     public void switchToNextSubtype() {
         final IBinder token = getWindow().getWindow().getAttributes().token;
         if (shouldSwitchToOtherInputMethods()) {
-            mRichImm.switchToNextInputMethod(token, true /* onlyCurrentIme */);
+            mRichImm.switchToNextInputMethod(token, false /* onlyCurrentIme */);
             return;
         }
         mSubtypeState.switchSubtype(token, mRichImm);
@@ -2016,7 +2016,12 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
         // TODO: Revisit here to reorganize the settings. Probably we can/should use different
         // strategy once the implementation of
         // {@link InputMethodManager#shouldOfferSwitchingToNextInputMethod} is defined well.
-        return mSettings.getCurrent().isLanguageSwitchKeyEnabled();
+        final boolean fallbackValue = mSettings.getCurrent().isLanguageSwitchKeyEnabled();
+        final IBinder token = getWindow().getWindow().getAttributes().token;
+        if (token == null) {
+            return fallbackValue;
+        }
+        return mRichImm.shouldOfferSwitchingToNextInputMethod(token, fallbackValue);
     }
 
     // slightly modified from Simple Keyboard: https://github.com/rkkr/simple-keyboard/blob/master/app/src/main/java/rkr/simplekeyboard/inputmethod/latin/LatinIME.java
